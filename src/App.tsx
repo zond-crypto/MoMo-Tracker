@@ -8,7 +8,16 @@ import { calculateTx, CalcNetwork, CalcTxType } from "./calculatorLogic";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import AIAdvisor from './AIAdvisor';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const safeNewAI = (key: string | undefined) => {
+  try {
+    return new GoogleGenAI({ apiKey: key || 'dummy_key' });
+  } catch (e) {
+    console.error("Failed to initialize Gemini AI", e);
+    return null;
+  }
+};
+
+const ai = safeNewAI(process.env.GEMINI_API_KEY);
 
 enum OperationType {
   CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write',
@@ -193,7 +202,7 @@ export default function App() {
     }
   }, [transactions, openingFloat, floatSet, history, levyRate, network, form.type, user, dataLoaded]);
 
-  const net = NETWORKS[network];
+  const net = NETWORKS[network] || NETWORKS.MTN;
 
   const balance = transactions.reduce((sum, tx) => {
     return sum + (TX_TYPES[tx.type]?.sign || 0) * tx.amount;
@@ -324,6 +333,7 @@ export default function App() {
 
   // Smart Insights Logic
   const insights = useMemo(() => {
+    if (!Array.isArray(transactions)) return [];
     const msgs = [];
     const smallWithdrawals = transactions.filter(t => t.type === 'WITHDRAWAL' && t.amount < 100);
     if (smallWithdrawals.length > 3) {
@@ -364,6 +374,7 @@ export default function App() {
 
   // Chart Data
   const chartData = useMemo(() => {
+    if (!Array.isArray(transactions)) return [];
     const grouped = transactions.reduce((acc, tx) => {
       if (tx.commission > 0) {
         const label = TX_TYPES[tx.type]?.label || tx.type;

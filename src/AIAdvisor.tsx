@@ -2,7 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Mic, Square, Sparkles, BrainCircuit, Loader2 } from 'lucide-react';
 import { GoogleGenAI, ThinkingLevel, Type, Modality, LiveServerMessage } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const safeNewAI = (key: string | undefined) => {
+  try {
+    return new GoogleGenAI({ apiKey: key || 'dummy_key' });
+  } catch (e) {
+    console.error("Failed to initialize Gemini AI", e);
+    return null;
+  }
+};
+
+const ai = safeNewAI(process.env.GEMINI_API_KEY);
 
 interface Message {
   role: 'user' | 'model';
@@ -27,9 +36,10 @@ export default function AIAdvisor({ contextData }: { contextData: any }) {
   }, [messages]);
 
   const initChat = () => {
+    if (!ai) throw new Error("AI not initialized");
     if (!chatRef.current) {
       chatRef.current = ai.chats.create({
-        model: 'gemini-3.1-pro-preview',
+        model: 'gemini-1.5-pro',
         config: {
           systemInstruction: `You are an expert financial advisor for mobile money agents in Zambia. 
           Analyze the agent's data and provide actionable advice to maximize commission and minimize fees.
@@ -94,11 +104,12 @@ export default function AIAdvisor({ contextData }: { contextData: any }) {
     }
 
     try {
+      if (!ai) throw new Error("AI not initialized");
       setIsVoiceMode(true);
       setMessages(prev => [...prev, { role: 'model', text: '🎙️ Voice mode activated. Listening...' }]);
       
       const sessionPromise = ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
+        model: "gemini-1.5-flash",
         callbacks: {
           onopen: () => {
             console.log("Live API connected");
