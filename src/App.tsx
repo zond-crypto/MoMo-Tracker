@@ -114,6 +114,7 @@ export default function App() {
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
   const [settingPin, setSettingPin] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   // Calculator State
   const [calcNetwork, setCalcNetwork] = useState<CalcNetwork>("MTN");
@@ -241,10 +242,28 @@ export default function App() {
       timestamp: Date.now(),
       network,
     };
-    setTransactions([newTx, ...transactions]);
+    if (editingId) {
+      setTransactions(transactions.map(t => t.id === editingId ? { ...newTx, id: editingId, time: t.time, timestamp: t.timestamp } : t));
+      setEditingId(null);
+      showToast("Transaction updated");
+    } else {
+      setTransactions([newTx, ...transactions]);
+      showToast("Transaction logged");
+    }
     setForm({ ...form, amount: "", note: "", reference: "" });
     setScreen("home");
-    showToast("Transaction logged");
+  }
+
+  function editTx(tx: Transaction) {
+    setForm({
+      type: tx.type,
+      amount: tx.amount.toString(),
+      note: tx.note,
+      reference: tx.reference
+    });
+    setNetwork(tx.network);
+    setEditingId(tx.id);
+    setScreen("log");
   }
 
   function deleteTx(id: number) {
@@ -272,6 +291,19 @@ export default function App() {
       setFloatSet(false);
       setScreen("home");
       showToast("New day started");
+    }
+  }
+
+  function clearAllData() {
+    if (confirm("DANGER: This will permanently delete ALL your transactions and history. This cannot be undone. Are you sure?")) {
+      setTransactions([]);
+      setHistory([]);
+      setOpeningFloat("");
+      setFloatSet(false);
+      setPin('');
+      localStorage.removeItem('momo_pin');
+      localStorage.removeItem('momo_data');
+      showToast("Account reset successfully");
     }
   }
 
@@ -447,6 +479,9 @@ export default function App() {
             <button onClick={() => signOut(auth)} className="flex items-center gap-1 text-slate-500 hover:text-slate-300 text-xs transition-colors">
               <LogOut size={12} /> Sign Out
             </button>
+            <button onClick={clearAllData} className="flex items-center gap-1 text-red-500 hover:text-red-400 text-[10px] mt-1 transition-colors">
+              <Trash2 size={10} /> Reset Account
+            </button>
           </div>
         </div>
 
@@ -531,7 +566,7 @@ export default function App() {
               ) : (
                 <div className="space-y-2">
                   {transactions.slice(0, 4).map(tx => (
-                    <TxRow key={tx.id} tx={tx} onDelete={deleteTx} netColor={NETWORKS[tx.network]?.text} />
+                    <TxRow key={tx.id} tx={tx} onDelete={deleteTx} onEdit={editTx} netColor={NETWORKS[tx.network]?.text} />
                   ))}
                 </div>
               )}
@@ -621,12 +656,29 @@ export default function App() {
               </div>
             </div>
 
-            <button
-              onClick={handleAddTx}
-              className={`w-full ${net.color} text-slate-950 py-4 rounded-xl font-bold text-sm tracking-wide transition-transform active:scale-95 shadow-lg`}
-            >
-              RECORD & CALCULATE
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddTx}
+                className={`flex-1 ${net.color} text-slate-950 py-4 rounded-xl font-bold text-sm tracking-wide transition-transform active:scale-95 shadow-lg`}
+              >
+                {editingId ? "UPDATE TRANSACTION" : "RECORD & CALCULATE"}
+              </button>
+              <button
+                onClick={() => {
+                  setForm({ type: "WITHDRAWAL", amount: "", note: "", reference: "" });
+                  setEditingId(null);
+                }}
+                className="bg-slate-800 text-slate-400 px-4 rounded-xl hover:bg-slate-700 transition-colors"
+                title="Reset Form"
+              >
+                <RefreshCw size={20} />
+              </button>
+            </div>
+            {editingId && (
+              <button onClick={() => { setEditingId(null); setScreen("home"); }} className="w-full text-xs text-slate-500 hover:text-slate-300 mt-2">
+                Cancel Editing
+              </button>
+            )}
           </div>
         )}
 
@@ -643,7 +695,7 @@ export default function App() {
             ) : (
               <div className="space-y-2">
                 {transactions.map(tx => (
-                  <TxRow key={tx.id} tx={tx} onDelete={deleteTx} netColor={NETWORKS[tx.network]?.text || net.text} full />
+                  <TxRow key={tx.id} tx={tx} onDelete={deleteTx} onEdit={editTx} netColor={NETWORKS[tx.network]?.text || net.text} full />
                 ))}
               </div>
             )}
@@ -934,7 +986,7 @@ export default function App() {
   );
 }
 
-function TxRow({ tx, onDelete, netColor, full }: { tx: Transaction; onDelete: (id: number) => void; netColor: string; full?: boolean }) {
+function TxRow({ tx, onDelete, onEdit, netColor, full }: { tx: Transaction; onDelete: (id: number) => void; onEdit: (tx: Transaction) => void; netColor: string; full?: boolean }) {
   const txDef = TX_TYPES[tx.type] || { label: tx.type, icon: Send, color: "text-slate-500", bg: "bg-slate-500/10", sign: -1 };
   const Icon = txDef.icon;
   return (
@@ -965,12 +1017,20 @@ function TxRow({ tx, onDelete, netColor, full }: { tx: Transaction; onDelete: (i
           {txDef.sign > 0 ? "+" : "−"}{fmt(tx.amount)}
         </div>
         {full && (
-          <button
-            onClick={() => onDelete(tx.id)}
-            className="text-[10px] text-slate-500 hover:text-red-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-end gap-1 w-full"
-          >
-            <Trash2 size={10} /> remove
-          </button>
+          <div className="flex flex-col gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity items-end">
+            <button
+              onClick={() => onEdit(tx)}
+              className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center justify-end gap-1 w-full"
+            >
+              <Plus size={10} className="rotate-45" /> edit
+            </button>
+            <button
+              onClick={() => onDelete(tx.id)}
+              className="text-[10px] text-slate-500 hover:text-red-400 flex items-center justify-end gap-1 w-full"
+            >
+              <Trash2 size={10} /> remove
+            </button>
+          </div>
         )}
       </div>
     </div>
