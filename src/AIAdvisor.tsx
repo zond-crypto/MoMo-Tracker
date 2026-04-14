@@ -2,16 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Send, Mic, Square, Sparkles, BrainCircuit, Loader2 } from 'lucide-react';
 import { GoogleGenAI, ThinkingLevel, Type, Modality, LiveServerMessage } from '@google/genai';
 
-const safeNewAI = (key: string | undefined) => {
-  try {
-    return new GoogleGenAI({ apiKey: key || 'dummy_key' });
-  } catch (e) {
-    console.error("Failed to initialize Gemini AI", e);
-    return null;
-  }
-};
-
-const ai = safeNewAI(process.env.GEMINI_API_KEY);
+import { ai } from './aiConfig';
 
 interface Message {
   role: 'user' | 'model';

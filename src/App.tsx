@@ -7,86 +7,10 @@ import { doc, getDoc, setDoc, getDocFromServer } from "firebase/firestore";
 import { calculateTx, CalcNetwork, CalcTxType } from "./calculatorLogic";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import AIAdvisor from './AIAdvisor';
-
-const safeNewAI = (key: string | undefined) => {
-  try {
-    return new GoogleGenAI({ apiKey: key || 'dummy_key' });
-  } catch (e) {
-    console.error("Failed to initialize Gemini AI", e);
-    return null;
-  }
-};
-
-const ai = safeNewAI(process.env.GEMINI_API_KEY);
-
-enum OperationType {
-  CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write',
-}
-
-interface FirestoreErrorInfo {
-  error: string; operationType: OperationType; path: string | null;
-  authInfo: any;
-}
-
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
-        providerId: provider.providerId,
-        displayName: provider.displayName,
-        email: provider.email,
-        photoUrl: provider.photoURL
-      })) || []
-    },
-    operationType,
-    path
-  };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
-}
-
-const NETWORKS: Record<string, any> = {
-  MTN: { color: "bg-yellow-500", text: "text-yellow-500", border: "border-yellow-500", label: "MTN MoMo" },
-  AIRTEL: { color: "bg-red-500", text: "text-red-500", border: "border-red-500", label: "Airtel Money" },
-  ZAMTEL: { color: "bg-green-500", text: "text-green-500", border: "border-green-500", label: "Zamtel Kwacha" },
-};
-
-const TX_TYPES: Record<string, any> = {
-  DEPOSIT: { label: "Deposit (Cash In)", icon: ArrowDownToLine, color: "text-blue-500", bg: "bg-blue-500/10", sign: -1 },
-  WITHDRAWAL: { label: "Withdrawal (Cash Out)", icon: ArrowUpFromLine, color: "text-purple-500", bg: "bg-purple-500/10", sign: 1 },
-  SEND: { label: "Send Money", icon: Send, color: "text-orange-500", bg: "bg-orange-500/10", sign: -1 },
-  AIRTIME: { label: "Airtime Sale", icon: Wifi, color: "text-sky-500", bg: "bg-sky-500/10", sign: -1 },
-  BILLS: { label: "Bill Payment", icon: Receipt, color: "text-indigo-500", bg: "bg-indigo-500/10", sign: -1 },
-  EXPENSE: { label: "Shop Expense", icon: Trash2, color: "text-rose-500", bg: "bg-rose-500/10", sign: 0 },
-  // Legacy
-  CASH_IN: { label: "Cash In (Deposit)", icon: ArrowDownToLine, color: "text-green-500", bg: "bg-green-500/10", sign: 1 },
-  CASH_OUT: { label: "Cash Out (Withdraw)", icon: ArrowUpFromLine, color: "text-red-500", bg: "bg-red-500/10", sign: -1 },
-  TRANSFER: { label: "Transfer Sent", icon: Send, color: "text-orange-500", bg: "bg-orange-500/10", sign: -1 },
-  FEE_EARNED: { label: "Commission Earned", icon: DollarSign, color: "text-green-500", bg: "bg-green-500/10", sign: 1 },
-  FEE_PAID: { label: "Fee Paid", icon: XCircle, color: "text-red-500", bg: "bg-red-500/10", sign: -1 },
-};
-
-type NetworkType = keyof typeof NETWORKS;
-
-interface Transaction {
-  id: number;
-  type: string;
-  amount: number;
-  fee: number;
-  commission: number;
-  levy: number;
-  note: string;
-  reference: string;
-  time: string;
-  timestamp: number;
-  network: NetworkType;
-}
+import { ai } from './aiConfig';
+import { NetworkType, Transaction, DayStats } from './types';
+import { NETWORKS, TX_TYPES } from './constants';
+import { TxRow } from './TxRow';
 
 function fmt(n: number | string) {
   return `K ${parseFloat((n || 0).toString()).toFixed(2)}`;
@@ -110,7 +34,7 @@ export default function App() {
     type: "WITHDRAWAL", amount: "", note: "", reference: ""
   });
   const [toast, setToast] = useState<string | null>(null);
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<DayStats[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [dataLoaded, setDataLoaded] = useState(false);
@@ -156,11 +80,7 @@ export default function App() {
       if (currentUser) {
         try {
           const docRef = doc(db, "users", currentUser.uid);
-          try { await getDocFromServer(docRef); } catch (error) {
-            if(error instanceof Error && error.message.includes('the client is offline')) {
-              console.error("Please check your Firebase configuration. ");
-            }
-          }
+          // Simplified: getDoc will fetch from server or cache automatically
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
@@ -171,7 +91,9 @@ export default function App() {
             if (data.levyRate !== undefined) setLevyRate(data.levyRate);
           }
         } catch (error) {
-          handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
+          console.error('Initial data fetch failed:', error);
+          // Don't throw here to avoid crashing the whole app, just log
+          // and allow the app to function in offline-first mode
         } finally {
           setDataLoaded(true);
           setLoadingAuth(false);
@@ -190,14 +112,15 @@ export default function App() {
       localStorage.setItem('momo_data', JSON.stringify(dataToSave));
       
       if (user) {
-        const saveData = async () => {
+        const timeoutId = setTimeout(async () => {
           try {
             await setDoc(doc(db, "users", user.uid), dataToSave, { merge: true });
           } catch (error) {
-            handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+            console.error('Failed to save to Firestore:', error);
           }
-        };
-        saveData();
+        }, 2000); // 2 second debounce
+
+        return () => clearTimeout(timeoutId);
       }
     }
   }, [transactions, openingFloat, floatSet, history, levyRate, network, form.type, user, dataLoaded]);
@@ -992,57 +915,6 @@ export default function App() {
             );
           })}
         </div>
-      </div>
-    </div>
-  );
-}
-
-function TxRow({ tx, onDelete, onEdit, netColor, full }: { tx: Transaction; onDelete: (id: number) => void; onEdit: (tx: Transaction) => void; netColor: string; full?: boolean }) {
-  const txDef = TX_TYPES[tx.type] || { label: tx.type, icon: Send, color: "text-slate-500", bg: "bg-slate-500/10", sign: -1 };
-  const Icon = txDef.icon;
-  return (
-    <div className="flex items-center gap-3 p-3 bg-slate-900 border border-slate-800 rounded-xl hover:bg-slate-800/50 transition-colors group">
-      <div className={`w-10 h-10 rounded-lg shrink-0 flex items-center justify-center ${txDef.bg} ${txDef.color}`}>
-        <Icon size={18} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-xs font-medium text-slate-200">{txDef.label}</div>
-        {(tx.reference || (full && tx.note)) && (
-          <div className="text-[10px] text-slate-400 mt-0.5 truncate">
-            {tx.reference && <span className="font-mono">#{tx.reference}</span>}
-            {tx.reference && full && tx.note && " | "}
-            {full && tx.note && (tx.note.length > 40 ? `${tx.note.substring(0, 40)}...` : tx.note)}
-          </div>
-        )}
-        <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
-          {tx.time} <span className="text-slate-700">•</span> <span className={netColor}>{tx.network}</span>
-        </div>
-        {full && tx.commission > 0 && (
-          <div className="text-[10px] text-green-400 mt-1 font-medium bg-green-500/10 inline-block px-1.5 py-0.5 rounded">
-            +K{tx.commission.toFixed(2)} commission
-          </div>
-        )}
-      </div>
-      <div className="text-right shrink-0">
-        <div className={`text-sm font-bold ${txDef.color}`}>
-          {txDef.sign > 0 ? "+" : "−"}{fmt(tx.amount)}
-        </div>
-        {full && (
-          <div className="flex flex-col gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity items-end">
-            <button
-              onClick={() => onEdit(tx)}
-              className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center justify-end gap-1 w-full"
-            >
-              <Plus size={10} className="rotate-45" /> edit
-            </button>
-            <button
-              onClick={() => onDelete(tx.id)}
-              className="text-[10px] text-slate-500 hover:text-red-400 flex items-center justify-end gap-1 w-full"
-            >
-              <Trash2 size={10} /> remove
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );
