@@ -915,16 +915,16 @@ export default function App() {
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-400">Gov Levy</span>
-                      <span className="text-red-400 font-mono">K{levy.toFixed(2)}</span>
+                      <span className="text-red-400 font-mono">K{single.levy.toFixed(2)}</span>
                     </div>
                     <div className="h-px bg-slate-800 my-2"></div>
                     <div className="flex justify-between font-bold">
                       <span className="text-slate-300">Total Deduction</span>
-                      <span className="text-rose-500 font-mono">K{totalDeduction.toFixed(2)}</span>
+                      <span className="text-rose-500 font-mono">K{(single.fee + single.levy).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between font-bold">
                       <span className="text-slate-300">Net Received</span>
-                      <span className="text-green-400 font-mono">K{net.toFixed(2)}</span>
+                      <span className="text-green-400 font-mono">K{(amt - (single.fee + single.levy)).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
