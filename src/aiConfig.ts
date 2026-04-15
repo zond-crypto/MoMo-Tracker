@@ -12,7 +12,7 @@ const getApiKey = () => {
 
 export const safeNewAI = () => {
   try {
-    return new GoogleGenAI({ apiKey: getApiKey() });
+    return new GoogleGenAI(getApiKey());
   } catch (e) {
     console.error("Failed to initialize Gemini AI", e);
     return null;

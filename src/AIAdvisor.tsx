@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, Mic, Square, Sparkles, BrainCircuit, Loader2 } from 'lucide-react';
-import { GoogleGenAI, ThinkingLevel, Type, Modality, LiveServerMessage } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 import { ai } from './aiConfig';
 
@@ -29,17 +29,20 @@ export default function AIAdvisor({ contextData }: { contextData: any }) {
   const initChat = () => {
     if (!ai) throw new Error("AI not initialized");
     if (!chatRef.current) {
-      chatRef.current = ai.chats.create({
+      const model = ai.getGenerativeModel({ 
         model: 'gemini-1.5-pro',
-        config: {
-          systemInstruction: `You are an expert financial advisor for mobile money agents in Zambia. 
-          Analyze the agent's data and provide actionable advice to maximize commission and minimize fees.
-          Keep your answers concise, professional, and easy to read.
-          
-          Current Agent Data Context:
-          ${JSON.stringify(contextData, null, 2)}`,
-          thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH }
-        }
+        systemInstruction: `You are an expert financial advisor for mobile money agents in Zambia. 
+        Analyze the agent's data and provide actionable advice to maximize commission and minimize fees.
+        Keep your answers concise, professional, and easy to read.
+        
+        Current Agent Data Context:
+        ${JSON.stringify(contextData, null, 2)}`
+      });
+      chatRef.current = model.startChat({
+        history: [],
+        generationConfig: {
+          maxOutputTokens: 1000,
+        },
       });
     }
     return chatRef.current;
@@ -55,14 +58,15 @@ export default function AIAdvisor({ contextData }: { contextData: any }) {
 
     try {
       const chat = initChat();
-      const responseStream = await chat.sendMessageStream({ message: userMsg });
+      const result = await chat.sendMessageStream(userMsg);
       
       let fullResponse = '';
       setMessages(prev => [...prev, { role: 'model', text: '', isThinking: true }]);
 
-      for await (const chunk of responseStream) {
-        if (chunk.text) {
-          fullResponse += chunk.text;
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        if (chunkText) {
+          fullResponse += chunkText;
           setMessages(prev => {
             const newMsgs = [...prev];
             newMsgs[newMsgs.length - 1] = { role: 'model', text: fullResponse, isThinking: false };
@@ -78,59 +82,9 @@ export default function AIAdvisor({ contextData }: { contextData: any }) {
     }
   };
 
-  // --- LIVE API (VOICE) PLACEHOLDER LOGIC ---
-  // A full Web Audio API implementation for PCM16 streaming is complex, 
-  // but we set up the connection and UI as requested.
-  const [liveSession, setLiveSession] = useState<any>(null);
-  
   const toggleVoiceMode = async () => {
-    if (isVoiceMode) {
-      // Stop voice mode
-      if (liveSession) {
-        // liveSession.close(); // Not directly exposed in the simple wrapper, but we would close it.
-      }
-      setIsVoiceMode(false);
-      setLiveSession(null);
-      return;
-    }
-
-    try {
-      if (!ai) throw new Error("AI not initialized");
-      setIsVoiceMode(true);
-      setMessages(prev => [...prev, { role: 'model', text: '🎙️ Voice mode activated. Listening...' }]);
-      
-      const sessionPromise = ai.live.connect({
-        model: "gemini-1.5-flash",
-        callbacks: {
-          onopen: () => {
-            console.log("Live API connected");
-            // In a full implementation, we would capture navigator.mediaDevices.getUserMedia
-            // and stream PCM16 audio chunks via session.sendRealtimeInput({ audio: ... })
-          },
-          onmessage: async (message: LiveServerMessage) => {
-            // Handle incoming audio from the model
-            // Decode base64 PCM and play via AudioContext
-            if (message.serverContent?.modelTurn?.parts[0]?.inlineData?.data) {
-               console.log("Received audio chunk");
-            }
-          },
-          onerror: (err) => console.error("Live API Error:", err),
-          onclose: () => setIsVoiceMode(false)
-        },
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
-          },
-          systemInstruction: `You are a helpful mobile money agent advisor. Keep answers very short. Context: ${JSON.stringify(contextData)}`,
-        },
-      });
-      
-      setLiveSession(sessionPromise);
-    } catch (error) {
-      console.error("Voice mode error:", error);
-      setIsVoiceMode(false);
-    }
+    alert("Voice mode is currently being optimized. Please use text chat for now.");
+    setIsVoiceMode(false);
   };
 
   return (
