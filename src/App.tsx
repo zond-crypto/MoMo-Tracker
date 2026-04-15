@@ -42,8 +42,12 @@ export default function App() {
   const [levyRate, setLevyRate] = useState<number>(0.0004);
 
   // Security & UX State
-  const [pin, setPin] = useState(localStorage.getItem('momo_pin') || '');
-  const [isLocked, setIsLocked] = useState(!!localStorage.getItem('momo_pin'));
+  const [pin, setPin] = useState(() => {
+    try { return localStorage.getItem('momo_pin') || ''; } catch (e) { return ''; }
+  });
+  const [isLocked, setIsLocked] = useState(() => {
+    try { return !!localStorage.getItem('momo_pin'); } catch (e) { return false; }
+  });
   const [pinInput, setPinInput] = useState('');
   const [pinError, setPinError] = useState(false);
   const [settingPin, setSettingPin] = useState(false);
@@ -57,7 +61,13 @@ export default function App() {
 
   // Offline-First Load
   useEffect(() => {
-    const cached = localStorage.getItem('momo_data');
+    let cached = null;
+    try {
+      cached = localStorage.getItem('momo_data');
+    } catch (e) {
+      console.error("Local storage blocked", e);
+    }
+    
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
