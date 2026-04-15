@@ -1,5 +1,4 @@
-<!doctype html>
-<html lang="en">
+<html lang="en" style="background-color: #020617; color: #f8fafc;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,26 +7,35 @@
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" href="/icon-512.png" />
     <style>
-      body { background-color: #020617; color: #f8fafc; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: sans-serif; }
+      body { background-color: #020617; color: #f8fafc; margin: 0; padding: 20px; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: sans-serif; text-align: center; }
       #root:empty::before { content: "Initializing Agent Dashboard..."; opacity: 0.5; font-size: 0.875rem; }
+      #error-display { display: none; background: #450a0a; border: 1px solid #991b1b; padding: 15px; border-radius: 8px; color: #fecaca; font-size: 12px; max-width: 90%; word-break: break-all; margin-top: 10px; }
     </style>
+    <script>
+      window.onerror = function(msg, url, lineNo, columnNo, error) {
+        var display = document.getElementById('error-display');
+        if (display) {
+          display.style.display = 'block';
+          display.innerHTML = '<strong>App Crash Detected:</strong><br>' + msg + '<br>at ' + url + ':' + lineNo;
+        }
+        return false;
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="error-display"></div>
+    <script type="module" src="src/main.tsx"></script>
     <script>
       // window.process polyfill
       window.process = window.process || { env: {} };
       
       if ('serviceWorker' in navigator) {
-        // Temporarily commented out to rule out cache issues
-        /*
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
+          navigator.serviceWorker.register('./sw.js')
             .then(reg => console.log('SW Registered!', reg))
             .catch(err => console.log('SW Reg failed', err));
         });
-        */
       }
     </script>
   </body>
