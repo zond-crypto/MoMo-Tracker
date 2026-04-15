@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Plus, Home, List, PieChart, Trash2, ArrowDownToLine, ArrowUpFromLine, Wifi, Send, DollarSign, XCircle, RefreshCw, CheckSquare, Square, Sparkles, Receipt, TrendingUp, LogOut, Calculator, AlertTriangle, Lightbulb, TrendingDown, Activity, BarChart as BarChart3, Lock, Unlock } from "lucide-react";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { auth, db, googleProvider } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, User } from "firebase/auth";
 import { doc, getDoc, setDoc, getDocFromServer } from "firebase/firestore";
